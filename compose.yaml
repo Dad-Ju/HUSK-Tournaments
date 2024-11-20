@@ -1,0 +1,6 @@
+﻿services:
+  dc-bot:
+    image: dc-bot
+    build:
+      context: .
+      dockerfile: DC-Bot/Dockerfile
