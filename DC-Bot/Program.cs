@@ -2,6 +2,7 @@
 using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -16,27 +17,24 @@ internal class Program
     private static readonly DiscordSocketConfig SocketConfig = new()
     {
         GatewayIntents = GatewayIntents.AllUnprivileged | GatewayIntents.GuildMembers,
-        AlwaysDownloadUsers = true,
+        AlwaysDownloadUsers = true
     };
 
     private static readonly InteractionServiceConfig InteractionServiceConfig = new()
     {
-        DefaultRunMode = RunMode.Async,
+        DefaultRunMode = RunMode.Async
         // LocalizationManager = new ResxLocalizationManager("InteractionFramework.Resources.CommandLocales", Assembly.GetEntryAssembly(), new CultureInfo("en-US"))
     };
 
     public static async Task Main(string[] args)
     {
         _configuration = new ConfigurationBuilder()
-            .AddEnvironmentVariables(prefix: "DC_")
+            .AddEnvironmentVariables("DC_")
             // ReSharper disable once StringLiteralTypo
-            .AddJsonFile("appsettings.json", optional: true)
+            .AddJsonFile("appsettings.json", true)
             .Build();
 
-        if (string.IsNullOrWhiteSpace(_configuration["token"]))
-        {
-            throw new NullReferenceException("Token is missing");
-        }
+        if (string.IsNullOrWhiteSpace(_configuration["token"])) throw new NullReferenceException("Token is missing");
 
         _services = new ServiceCollection()
             .AddSingleton(_configuration)
@@ -47,6 +45,18 @@ internal class Program
             .AddSingleton<InteractionHandler>()
             .AddDbContext<DatabaseContext>()
             .BuildServiceProvider();
+
+        // Apply migrations and seed the database
+        using (var scope = _services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<DatabaseContext>();
+
+            // Apply pending migrations
+            await context.Database.MigrateAsync();
+
+            // Seed database with initial data
+            await DBSeeder.SeedRolesAsync(context);
+        }
 
         var client = _services.GetRequiredService<DiscordSocketClient>();
 
